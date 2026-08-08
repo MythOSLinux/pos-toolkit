@@ -78,6 +78,57 @@ pub enum PrintOp {
 /// Execute a job against a target. One connection per job — restaurant/retail
 /// print volume never justifies pooling, and reconnect-per-job survives
 /// printer power cycles.
+/// Send bytes to a printer and read whatever it sends back.
+///
+/// The transport was write-only until now, which meant a printer could not be
+/// asked anything: not its model, not its serial, not whether it has paper.
+/// ESC/POS answers all three (`GS I n`, `DLE EOT n`), and `escpos`'s `Driver`
+/// trait already has `read` on both the network and USB drivers — so this is a
+/// door that only needed opening.
+///
+/// Deliberately generic: it moves bytes and returns bytes. Which query to send
+/// and how to read the reply is ESC/POS semantics and belongs in the host's
+/// TypeScript, not in here (the caller's thin-core rule).
+///
+/// One read, one short timeout, and an empty vec when the printer says nothing
+/// — silence is a legitimate answer from a head that does not implement a
+/// query, and it must not look like a failure.
+pub fn query(target: &PrinterTarget, payload: &[u8], timeout_ms: u64) -> Result<Vec<u8>, String> {
+    let timeout = Some(Duration::from_millis(timeout_ms.clamp(100, 10_000)));
+    let mut buf = [0u8; 128];
+
+    fn exchange<D: Driver>(driver: D, payload: &[u8], buf: &mut [u8]) -> Result<usize, PrinterError> {
+        driver.write(payload)?;
+        driver.flush()?;
+        driver.read(buf)
+    }
+
+    let read = match target {
+        PrinterTarget::Network { host, port } => {
+            let driver = map_err(NetworkDriver::open(host, *port, timeout))?;
+            exchange(driver, payload, &mut buf)
+        }
+        PrinterTarget::Usb { vendor_id, product_id } => {
+            let driver = map_err(UsbDriver::open(*vendor_id, *product_id, timeout, None))?;
+            exchange(driver, payload, &mut buf)
+        }
+        // The spooler takes a job and reports on the job, never on the head.
+        PrinterTarget::System { .. } => {
+            return Err("this printer is reached through the OS spooler, which cannot carry a reply".into())
+        }
+    };
+
+    match read {
+        Ok(n) => Ok(buf[..n].to_vec()),
+        // A timeout means "this head does not answer that", not "the print
+        // path is broken" — the caller shows an empty answer, not an error.
+        Err(e) => {
+            log::info!("printer query returned nothing: {e}");
+            Ok(Vec::new())
+        }
+    }
+}
+
 pub fn print_job(target: &PrinterTarget, ops: &[PrintOp]) -> Result<(), String> {
     match target {
         PrinterTarget::Network { host, port } => {

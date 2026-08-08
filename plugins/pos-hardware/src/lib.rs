@@ -29,6 +29,17 @@ mod commands {
         printing::open_cash_drawer(&target)
     }
 
+    /// Ask the printer something and return its raw reply (identity, status).
+    /// Bytes in, bytes out — the ESC/POS meaning lives in the host.
+    #[tauri::command]
+    pub async fn query_printer(
+        target: printing::PrinterTarget,
+        payload: Vec<u8>,
+        timeout_ms: u64,
+    ) -> Result<Vec<u8>, String> {
+        printing::query(&target, &payload, timeout_ms)
+    }
+
     #[tauri::command]
     pub fn list_usb_devices() -> Result<Vec<usb::UsbDeviceInfo>, String> {
         usb::list_usb_devices()
@@ -56,6 +67,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             commands::print_job,
             commands::open_cash_drawer,
+            commands::query_printer,
             commands::list_usb_devices,
             commands::list_system_printers,
             commands::check_physical_keyboard,
