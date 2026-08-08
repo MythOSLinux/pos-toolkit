@@ -11,4 +11,10 @@ export {
   type MoneyRow,
   type BuildOptions,
 } from "./receipt";
-export { sanitizePrinterString, type PrinterEncoding } from "./encoding";
+export {
+  sanitizePrinterString,
+  setRomanizer,
+  builtInTranslitScripts,
+  type PrinterEncoding,
+  type Romanizer,
+} from "./encoding";
