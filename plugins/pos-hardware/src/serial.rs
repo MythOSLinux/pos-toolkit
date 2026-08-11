@@ -43,7 +43,11 @@
 //!   dead, so [`open_error_hint`] turns that error into the sentence that fixes
 //!   it rather than leaving "Permission denied" on screen.
 //! - **Linux, Bluetooth SPP:** `/dev/rfcomm0`, after pairing the device and
-//!   binding it (`rfcomm bind`, from `bluez-utils`). Worth knowing about
+//!   binding it with `rfcomm bind`. ⚠ **That binary is not where its name
+//!   suggests**: BlueZ deprecated the tool, so distributions have split it out
+//!   of the main utilities package — `bluez-deprecated-tools` on Arch/Manjaro,
+//!   while `bluez-utils` itself no longer carries it. The kernel side
+//!   (`rfcomm.ko`) is standard. Worth knowing about
 //!   because it is a **second, independent serial route**: it reaches the
 //!   device over the radio rather than through a USB bridge chip, so it is the
 //!   way in when a scanner's USB serial mode turns out to be a CH340 clone the
