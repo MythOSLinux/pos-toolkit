@@ -24,6 +24,11 @@ log = "0.4"
 # is empty. (Carried over from medusa-pos.)
 escpos = { version = "0.19.0", features = ["graphics", "usb"] }
 rusb = "0.9"
+# Virtual COM peripherals (scanners today). `default-features = false` drops the
+# libudev link on Linux and enumerates through sysfs instead: the metadata is
+# the same for our purposes and it keeps the build from needing a system dev
+# package on every machine that compiles this workspace.
+serialport = { version = "4", default-features = false }
 
 [dev-dependencies]
 serde_json = "1"

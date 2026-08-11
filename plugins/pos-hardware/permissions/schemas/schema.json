@@ -307,6 +307,30 @@
           "markdownDescription": "Denies the check_physical_keyboard command without any pre-configured scope."
         },
         {
+          "description": "Enables the close_serial_scanner command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-close-serial-scanner",
+          "markdownDescription": "Enables the close_serial_scanner command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the close_serial_scanner command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-close-serial-scanner",
+          "markdownDescription": "Denies the close_serial_scanner command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the list_serial_ports command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-serial-ports",
+          "markdownDescription": "Enables the list_serial_ports command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_serial_ports command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-serial-ports",
+          "markdownDescription": "Denies the list_serial_ports command without any pre-configured scope."
+        },
+        {
           "description": "Enables the list_system_printers command without any pre-configured scope.",
           "type": "string",
           "const": "allow-list-system-printers",
@@ -343,6 +367,30 @@
           "markdownDescription": "Denies the open_cash_drawer command without any pre-configured scope."
         },
         {
+          "description": "Enables the open_serial_scanner command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-serial-scanner",
+          "markdownDescription": "Enables the open_serial_scanner command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_serial_scanner command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-serial-scanner",
+          "markdownDescription": "Denies the open_serial_scanner command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the open_serial_scanners command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-serial-scanners",
+          "markdownDescription": "Enables the open_serial_scanners command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_serial_scanners command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-serial-scanners",
+          "markdownDescription": "Denies the open_serial_scanners command without any pre-configured scope."
+        },
+        {
           "description": "Enables the print_job command without any pre-configured scope.",
           "type": "string",
           "const": "allow-print-job",
@@ -353,6 +401,18 @@
           "type": "string",
           "const": "deny-print-job",
           "markdownDescription": "Denies the print_job command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the query_printer command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-query-printer",
+          "markdownDescription": "Enables the query_printer command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the query_printer command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-query-printer",
+          "markdownDescription": "Denies the query_printer command without any pre-configured scope."
         },
         {
           "description": "Enables the toggle_virtual_keyboard command without any pre-configured scope.",
@@ -367,10 +427,10 @@
           "markdownDescription": "Denies the toggle_virtual_keyboard command without any pre-configured scope."
         },
         {
-          "description": "All pos-hardware commands: printing, drawer, device enumeration, keyboard.\n#### This default permission set includes:\n\n- `allow-print-job`\n- `allow-open-cash-drawer`\n- `allow-list-usb-devices`\n- `allow-list-system-printers`\n- `allow-check-physical-keyboard`\n- `allow-toggle-virtual-keyboard`",
+          "description": "All pos-hardware commands: printing, drawer, device enumeration, keyboard, serial peripherals.\n#### This default permission set includes:\n\n- `allow-print-job`\n- `allow-open-cash-drawer`\n- `allow-query-printer`\n- `allow-list-usb-devices`\n- `allow-list-system-printers`\n- `allow-check-physical-keyboard`\n- `allow-toggle-virtual-keyboard`\n- `allow-list-serial-ports`\n- `allow-open-serial-scanner`\n- `allow-close-serial-scanner`\n- `allow-open-serial-scanners`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "All pos-hardware commands: printing, drawer, device enumeration, keyboard.\n#### This default permission set includes:\n\n- `allow-print-job`\n- `allow-open-cash-drawer`\n- `allow-list-usb-devices`\n- `allow-list-system-printers`\n- `allow-check-physical-keyboard`\n- `allow-toggle-virtual-keyboard`"
+          "markdownDescription": "All pos-hardware commands: printing, drawer, device enumeration, keyboard, serial peripherals.\n#### This default permission set includes:\n\n- `allow-print-job`\n- `allow-open-cash-drawer`\n- `allow-query-printer`\n- `allow-list-usb-devices`\n- `allow-list-system-printers`\n- `allow-check-physical-keyboard`\n- `allow-toggle-virtual-keyboard`\n- `allow-list-serial-ports`\n- `allow-open-serial-scanner`\n- `allow-close-serial-scanner`\n- `allow-open-serial-scanners`"
         }
       ]
     }

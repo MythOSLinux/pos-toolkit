@@ -1,12 +1,17 @@
 "$schema" = "schemas/schema.json"
 
 [default]
-description = "All pos-hardware commands: printing, drawer, device enumeration, keyboard."
+description = "All pos-hardware commands: printing, drawer, device enumeration, keyboard, serial peripherals."
 permissions = [
     "allow-print-job",
     "allow-open-cash-drawer",
+    "allow-query-printer",
     "allow-list-usb-devices",
     "allow-list-system-printers",
     "allow-check-physical-keyboard",
     "allow-toggle-virtual-keyboard",
+    "allow-list-serial-ports",
+    "allow-open-serial-scanner",
+    "allow-close-serial-scanner",
+    "allow-open-serial-scanners",
 ]

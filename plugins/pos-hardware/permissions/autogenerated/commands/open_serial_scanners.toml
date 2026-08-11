@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-open-serial-scanners"
+description = "Enables the open_serial_scanners command without any pre-configured scope."
+commands.allow = ["open_serial_scanners"]
+
+[[permission]]
+identifier = "deny-open-serial-scanners"
+description = "Denies the open_serial_scanners command without any pre-configured scope."
+commands.deny = ["open_serial_scanners"]

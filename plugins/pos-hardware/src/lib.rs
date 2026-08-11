@@ -10,14 +10,16 @@
 
 pub mod keyboard;
 pub mod printing;
+pub mod serial;
 pub mod usb;
 pub mod winprint;
 
 use tauri::plugin::{Builder, TauriPlugin};
-use tauri::Runtime;
+use tauri::{Manager, Runtime};
 
 mod commands {
-    use crate::{keyboard, printing, usb, winprint};
+    use crate::{keyboard, printing, serial, usb, winprint};
+    use tauri::{AppHandle, Runtime, State};
 
     #[tauri::command]
     pub async fn print_job(target: printing::PrinterTarget, ops: Vec<printing::PrintOp>) -> Result<(), String> {
@@ -59,6 +61,38 @@ mod commands {
     pub fn toggle_virtual_keyboard() {
         keyboard::toggle_virtual_keyboard();
     }
+
+    /* ------------------------------------------------ serial (Virtual COM) */
+
+    #[tauri::command]
+    pub fn list_serial_ports() -> Result<Vec<serial::SerialPortInfo>, String> {
+        serial::list_serial_ports()
+    }
+
+    /// Attach a reader to `path`; framed scans arrive on `pos-hardware://serial-scan`.
+    #[tauri::command]
+    pub fn open_serial_scanner<R: Runtime>(
+        app: AppHandle<R>,
+        state: State<'_, serial::SerialState>,
+        path: String,
+        baud: u32,
+        idle_ms: u64,
+    ) -> Result<(), String> {
+        serial::open_scanner(app, &state, path, baud, idle_ms)
+    }
+
+    #[tauri::command]
+    pub fn close_serial_scanner(
+        state: State<'_, serial::SerialState>,
+        path: String,
+    ) -> Result<(), String> {
+        serial::close_scanner(&state, &path)
+    }
+
+    #[tauri::command]
+    pub fn open_serial_scanners(state: State<'_, serial::SerialState>) -> Result<Vec<String>, String> {
+        serial::open_scanners(&state)
+    }
 }
 
 /// Initialize the plugin (name: `pos-hardware`).
@@ -72,6 +106,16 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::list_system_printers,
             commands::check_physical_keyboard,
             commands::toggle_virtual_keyboard,
+            commands::list_serial_ports,
+            commands::open_serial_scanner,
+            commands::close_serial_scanner,
+            commands::open_serial_scanners,
         ])
+        // Readers are per-port and long-lived, so the plugin owns the registry
+        // rather than each caller keeping its own and racing for the port.
+        .setup(|app, _api| {
+            app.manage(serial::SerialState::default());
+            Ok(())
+        })
         .build()
 }
