@@ -1,6 +1,6 @@
 # pos-toolkit
 
-Building blocks for point-of-sale applications, by [Nari Solutions](https://github.com/narisolutions). Extracted from our POS products ([medusa-pos](https://github.com/narisolutions/medusa-pos) and Tamada); built for them, usable by anyone. Apache-2.0.
+Building blocks for point-of-sale applications, by [Nari Solutions](https://github.com/narisolutions). Extracted from our POS products, among them [medusa-pos](https://github.com/narisolutions/medusa-pos); built for them, usable by anyone. Apache-2.0.
 
 | Package | What it is |
 |---|---|
