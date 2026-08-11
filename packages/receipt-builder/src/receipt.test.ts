@@ -75,6 +75,38 @@ describe("buildReceiptText", () => {
     expect(itemLine).toContain("An extremely long".substring(0, PAPER_CONFIG["57mm"].maxItemTitleLen).trim());
   });
 
+  it("renders a named payment row beside the money rows", () => {
+    const text = buildReceiptText(
+      {
+        headerLines: [],
+        items: [],
+        totalRows: [{ label: "Total", amount: 3050 }],
+        paymentRows: [
+          { label: "Payment Method", value: "Cash" },
+          { label: "Amount Paid", amount: 4000 },
+        ],
+      },
+      { formatAmount: tetri }
+    );
+    const lines = text.split("\n");
+    expect(lines.find((l) => l.startsWith("Payment Method:"))).toMatch(/Payment Method: +Cash$/);
+    expect(lines.find((l) => l.startsWith("Amount Paid:"))).toMatch(/40\.00$/);
+  });
+
+  it("reports cp852 characters it had to replace", () => {
+    const unmapped: string[] = [];
+    buildReceiptText(
+      {
+        headerLines: ["Тбилиси"],
+        items: [{ title: "Khinkali", qty: 1, unitPrice: 250 }],
+        totalRows: [],
+      },
+      { formatAmount: tetri, encoding: "cp852", onUnmapped: (c) => unmapped.push(c) }
+    );
+    expect(unmapped).toContain("Т");
+    expect(unmapped.length).toBeGreaterThan(0);
+  });
+
   it("renders centered messages (unpaid banner)", () => {
     const text = buildReceiptText(
       { headerLines: [], items: [], totalRows: [], messages: ["** UNPAID **"] },

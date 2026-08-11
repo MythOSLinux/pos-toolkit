@@ -26,6 +26,26 @@ export interface MoneyRow {
   amount: number;
 }
 
+/**
+ * A row in the same block that carries a label instead of a sum — "Payment
+ * Method: Cash", "Terminal: 4", "Auth: 004512".
+ *
+ * The payment block was money-only, which read as complete until a host tried
+ * to put the tender's *name* next to what was tendered. Moving it up into
+ * `metaRows` puts it at the top of the receipt, columns away from the amount
+ * it describes; the alternative was a host post-processing the built string.
+ */
+export interface TextRow {
+  label: string;
+  value: string;
+}
+
+export type PaymentRow = MoneyRow | TextRow;
+
+function isMoneyRow(row: PaymentRow): row is MoneyRow {
+  return typeof (row as MoneyRow).amount === "number";
+}
+
 /** Extra line under an item: modifier, per-item discount, note. */
 export interface ItemSubline {
   text: string;
@@ -52,8 +72,8 @@ export interface ReceiptDoc {
   items: ReceiptItem[];
   /** Subtotal/discount/VAT/total rows — the host decides which exist. */
   totalRows: MoneyRow[];
-  /** Tenders, tips, change, amount due. */
-  paymentRows?: MoneyRow[];
+  /** Tenders, tips, change, amount due — and named rows like the tender used. */
+  paymentRows?: PaymentRow[];
   /** Centered emphasis lines, e.g. "** UNPAID **". */
   messages?: string[];
   /** Centered footer block, e.g. "Thank you for your visit!". */
@@ -64,6 +84,12 @@ export interface BuildOptions {
   formatAmount: (amount: number) => string;
   paperWidth?: PaperWidth;
   encoding?: PrinterEncoding;
+  /**
+   * Called for each character cp852 had to replace with "?". A wrong codepage
+   * is otherwise invisible until someone reads the paper: the sanitizer knows,
+   * but building a document swallowed what it knew.
+   */
+  onUnmapped?: (char: string) => void;
 }
 
 /** `left ... right` padded to the line width (minimum one space between). */
@@ -107,7 +133,7 @@ export function buildReceiptText(doc: ReceiptDoc, opts: BuildOptions): string {
   const encoding = opts.encoding ?? "ascii";
   const { lineWidth, maxItemTitleLen } = PAPER_CONFIG[paperWidth];
   const fmt = opts.formatAmount;
-  const clean = (s: string) => sanitizePrinterString(s, encoding);
+  const clean = (s: string) => sanitizePrinterString(s, encoding, opts.onUnmapped);
 
   const separator = "=".repeat(lineWidth);
   const thinSeparator = "-".repeat(lineWidth);
@@ -152,7 +178,8 @@ export function buildReceiptText(doc: ReceiptDoc, opts: BuildOptions): string {
   if (doc.paymentRows?.length) {
     lines.push("");
     for (const row of doc.paymentRows) {
-      lines.push(padLine(`${clean(row.label)}:`, fmt(row.amount), lineWidth));
+      const right = isMoneyRow(row) ? fmt(row.amount) : clean(row.value);
+      lines.push(padLine(`${clean(row.label)}:`, right, lineWidth));
     }
   }
 

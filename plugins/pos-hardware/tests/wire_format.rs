@@ -2,7 +2,7 @@
 //! bindings) for the printing types. Tag names and casing are load-bearing:
 //! a serde attribute change here breaks every host silently.
 
-use tauri_plugin_pos_hardware::printing::{Align, PrintOp, PrinterTarget};
+use tauri_plugin_pos_hardware::printing::{Align, PrintOp, PrinterTarget, QrEcc};
 
 #[test]
 fn printer_target_wire_format() {
@@ -31,6 +31,8 @@ fn print_op_wire_format() {
             {"op":"text","text":"10 x Khinkali","bold":true,"align":"center","size":[2,2]},
             {"op":"text","text":"plain"},
             {"op":"image","path":"/tmp/logo.png","maxWidth":384},
+            {"op":"qrCode","data":"{\"v\":1,\"ref\":\"order_01K\"}","size":6,"correction":"h"},
+            {"op":"qrCode","data":"bare"},
             {"op":"feed","lines":3},
             {"op":"cut"},
             {"op":"drawerKick"},
@@ -45,8 +47,14 @@ fn print_op_wire_format() {
     ));
     assert!(matches!(&ops[1], PrintOp::Text { bold: false, align: None, size: None, .. }));
     assert!(matches!(&ops[2], PrintOp::Image { max_width: Some(384), .. }));
-    assert!(matches!(&ops[3], PrintOp::Feed { lines: 3 }));
-    assert!(matches!(&ops[4], PrintOp::Cut));
-    assert!(matches!(&ops[5], PrintOp::DrawerKick));
-    assert!(matches!(&ops[6], PrintOp::Raw { ref bytes } if bytes == &[27, 64]));
+    assert!(matches!(
+        &ops[3],
+        PrintOp::QrCode { data, size: Some(6), correction: Some(QrEcc::H) } if data == r#"{"v":1,"ref":"order_01K"}"#
+    ));
+    // size and correction are optional — the print path supplies the defaults
+    assert!(matches!(&ops[4], PrintOp::QrCode { size: None, correction: None, .. }));
+    assert!(matches!(&ops[5], PrintOp::Feed { lines: 3 }));
+    assert!(matches!(&ops[6], PrintOp::Cut));
+    assert!(matches!(&ops[7], PrintOp::DrawerKick));
+    assert!(matches!(&ops[8], PrintOp::Raw { ref bytes } if bytes == &[27, 64]));
 }

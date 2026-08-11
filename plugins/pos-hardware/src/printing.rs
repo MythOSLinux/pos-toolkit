@@ -11,7 +11,10 @@ use escpos::driver::{Driver, NetworkDriver, UsbDriver};
 use escpos::errors::PrinterError;
 use escpos::printer::Printer;
 use escpos::printer_options::PrinterOptions;
-use escpos::utils::{BitImageOption, BitImageSize, CashDrawer, JustifyMode, Protocol};
+use escpos::utils::{
+    BitImageOption, BitImageSize, CashDrawer, JustifyMode, Protocol, QRCodeCorrectionLevel,
+    QRCodeModel, QRCodeOption,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::winprint;
@@ -45,6 +48,29 @@ pub enum Align {
     Right,
 }
 
+/// QR error correction level. Higher levels survive smudged thermal paper at
+/// the cost of capacity.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "snake_case")]
+pub enum QrEcc {
+    L,
+    M,
+    Q,
+    H,
+}
+
+impl From<QrEcc> for QRCodeCorrectionLevel {
+    fn from(value: QrEcc) -> Self {
+        match value {
+            QrEcc::L => QRCodeCorrectionLevel::L,
+            QrEcc::M => QRCodeCorrectionLevel::M,
+            QrEcc::Q => QRCodeCorrectionLevel::Q,
+            QrEcc::H => QRCodeCorrectionLevel::H,
+        }
+    }
+}
+
 /// One printer instruction. Hosts compose receipts/tickets out of these.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -65,6 +91,23 @@ pub enum PrintOp {
     /// Raster image from a file path, optionally constrained to a max width in dots.
     #[serde(rename_all = "camelCase")]
     Image { path: String, #[serde(default)] max_width: Option<u32> },
+    /// 2D code carrying a structured payload — hand-off tickets, payment links.
+    ///
+    /// Model 2 rather than escpos's Model 1 default: it is the model every
+    /// phone camera and scanner app assumes, and Model 1 is a legacy encoding
+    /// some readers no longer decode at all.
+    #[serde(rename_all = "camelCase")]
+    QrCode {
+        data: String,
+        /// Module size in dots, 1..=15 (escpos caps at 15). Defaults to 4;
+        /// below 3 a 58mm head prints modules too fine for a phone to resolve.
+        #[serde(default)]
+        size: Option<u8>,
+        /// Defaults to `M` — enough redundancy for thermal paper without
+        /// spending a third of the capacity on it.
+        #[serde(default)]
+        correction: Option<QrEcc>,
+    },
     /// Feed n lines.
     Feed { lines: u8 },
     /// Full cut.
@@ -209,6 +252,14 @@ fn run_ops<D: Driver>(printer: &mut Printer<D>, ops: &[PrintOp]) -> Result<(), S
                 let option = BitImageOption::new(*max_width, None, BitImageSize::Normal)
                     .map_err(|e| e.to_string())?;
                 map_err(printer.bit_image_option(path, option))?;
+            }
+            PrintOp::QrCode { data, size, correction } => {
+                let option = QRCodeOption::new(
+                    QRCodeModel::Model2,
+                    size.unwrap_or(4).clamp(1, 15),
+                    correction.map_or(QRCodeCorrectionLevel::M, Into::into),
+                );
+                map_err(printer.qrcode_option(data, option))?;
             }
             PrintOp::Feed { lines } => {
                 map_err(printer.feeds(*lines))?;

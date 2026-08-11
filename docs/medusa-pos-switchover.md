@@ -12,7 +12,7 @@ Part 1 (the Rust hardware layer) is the load-bearing dedup — it removes a secu
 
 Extracted from medusa-pos `src-tauri` (same `escpos` 0.19 + `rusb`, same transports), so behavior parity is by construction:
 
-- `printing::print_job(&PrinterTarget, &[PrintOp])` — one connection per job; ops are `Text { text, bold, align, size }`, `Image { path, max_width }`, `Feed`, `Cut`, `DrawerKick`, `Raw { bytes }`.
+- `printing::print_job(&PrinterTarget, &[PrintOp])` — one connection per job; ops are `Text { text, bold, align, size }`, `Image { path, max_width }`, `QrCode { data, size, correction }`, `Feed`, `Cut`, `DrawerKick`, `Raw { bytes }`.
 - `printing::open_cash_drawer(&PrinterTarget)` — byte-identical to the in-tree version (network sends the bare `1B 70 00 19 FF` pulse with no init; USB/spooler init + Pin2).
 - `usb::list_usb_devices()` — the class-7 / composite-with-printer-interface scan, unchanged.
 - `winprint::{raw_print, list_system_printers}` — the Windows spooler layer, unchanged (⚠ one wire change, see below).
