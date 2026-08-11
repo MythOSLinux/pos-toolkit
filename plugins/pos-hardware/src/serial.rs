@@ -42,8 +42,18 @@
 //!   This is the single commonest reason a correctly-configured scanner appears
 //!   dead, so [`open_error_hint`] turns that error into the sentence that fixes
 //!   it rather than leaving "Permission denied" on screen.
+//! - **Linux, Bluetooth SPP:** `/dev/rfcomm0`, after pairing the device and
+//!   binding it (`rfcomm bind`, from `bluez-utils`). Worth knowing about
+//!   because it is a **second, independent serial route**: it reaches the
+//!   device over the radio rather than through a USB bridge chip, so it is the
+//!   way in when a scanner's USB serial mode turns out to be a CH340 clone the
+//!   host kernel refuses to bind. Observed 2026-08-11 on Manjaro 7.1.4 —
+//!   `ch341-uart … failed to read break control: -110`, probe fails, and no
+//!   `/dev/ttyUSB*` is ever created. ⚠ An `rfcomm bind` does not survive a
+//!   reboot on its own; a venue deployment needs a unit or udev rule for it.
 //! - **Windows:** `COM3` and friends. CDC-class devices need no driver on
-//!   Windows 10+; some vendors still ship one.
+//!   Windows 10+; some vendors still ship one — including for CH340, which is
+//!   why a device Linux refuses may work there.
 //! - **macOS:** `/dev/cu.usbmodem*`. Prefer `cu.` over `tty.` — the latter
 //!   blocks on carrier detect.
 
@@ -174,18 +184,26 @@ pub fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
         .collect())
 }
 
-/// A name only a USB-attached serial device gets.
+/// A name only a port with a real device behind it gets.
 ///
 /// The fallback for when the port type says `Unknown`, which on Linux it often
 /// does — the sysfs enumeration used without libudev classifies almost nothing,
 /// and even with libudev a plain `ttyS*` comes back unknown rather than PCI.
-/// The naming convention is stable across every Linux distribution: `ttyUSB*`
-/// for a vendor bridge (CH340, FTDI, PL2303), `ttyACM*` for a class-compliant
-/// CDC device, `cu.usb*` on macOS.
+/// The naming conventions are stable across every Linux distribution:
+///
+/// - `ttyUSB*` — a vendor USB bridge (CH340, FTDI, PL2303)
+/// - `ttyACM*` — a class-compliant USB CDC device
+/// - `rfcomm*` — **Bluetooth SPP**, which matters more than it looks: it is a
+///   serial port that reaches the scanner over the radio instead of over a USB
+///   bridge chip, so it is the way in when a scanner's USB serial mode is a
+///   CH340 clone the host kernel refuses to bind (seen on Manjaro 7.1.4,
+///   2026-08-11: `ch341-uart … probe failed with error -110`)
+/// - `cu.usb*` / `tty.usb*` — macOS
 fn is_usb_serial_name(path: &str) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path);
     name.starts_with("ttyUSB")
         || name.starts_with("ttyACM")
+        || name.starts_with("rfcomm")
         || name.starts_with("cu.usb")
         || name.starts_with("tty.usb")
 }

@@ -223,6 +223,23 @@ carrier detect.
 use.** Wired USB almost always does; 2.4G dongles and Bluetooth are often
 HID-only. Confirm against the model's config sheet before designing around it.
 
+⚠ **And check the host will actually bind it.** A scanner's "Virtual COM" is
+often a **CH340** USB-serial bridge rather than class-compliant CDC, and cheap
+CH340 implementations do not answer the whole CH341 register set. Recent Linux
+kernels read break control during probe and give up when it times out:
+
+```
+ch341-uart ttyUSB0: failed to read break control: -110
+ch341-uart ttyUSB0: probe with driver ch341-uart failed with error -110
+```
+
+No `/dev/ttyUSB*` is created, and from the application the scanner simply looks
+dead. Seen on Manjaro 7.1.4, 2026-08-11. Windows binds the same device happily,
+so this is a Linux-host problem rather than a broken scanner. **If a scanner
+also offers Bluetooth SPP, that is a second serial route with no bridge chip in
+it** (`/dev/rfcomm0` after pairing and `rfcomm bind`) — worth trying before
+concluding the device cannot do serial at all.
+
 ### Suggested settings shape
 
 Keep the wedge path as the default and the fallback — not every till is a
