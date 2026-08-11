@@ -85,6 +85,17 @@ pub struct SerialPortInfo {
     pub product: Option<String>,
     /// The only field that reliably distinguishes two identical scanners.
     pub serial_number: Option<String>,
+    /// Worth offering to a human: a USB or Bluetooth port, never a legacy
+    /// `ttyS*`. A picker should show these and put the rest behind "show all".
+    pub likely: bool,
+    /// Linux `/dev/serial/by-id/…`, where one exists.
+    ///
+    /// **Prefer this over `path` when storing a choice.** `ttyUSB0` is assigned
+    /// in enumeration order, so unplugging a scanner and plugging it back — or
+    /// a device that re-enumerates on its own — can move it to `ttyUSB1` and
+    /// silently point a saved setting at nothing. The by-id symlink is derived
+    /// from the device's own identity and survives that.
+    pub stable_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,6 +132,13 @@ pub struct SerialState(Mutex<HashMap<String, Arc<AtomicBool>>>);
 /// deciding which is which from a VID/PID table would be wrong the first time a
 /// venue bought a model the table had never heard of. The host presents the
 /// list and a human picks.
+///
+/// **But the raw list is unusable on Linux**, which is why [`SerialPortInfo`]
+/// carries `likely` and `stable_path`. A stock desktop reports 32 legacy
+/// `/dev/ttyS*` ports that have never had anything attached to them (measured
+/// on Manjaro, 2026-08-11 — with *and* without libudev, so the feature flag is
+/// not the fix). A picker that lists those and the scanner together asks the
+/// operator a question they cannot answer.
 pub fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
     let ports = serialport::available_ports().map_err(|e| format!("could not list serial ports: {e}"))?;
     Ok(ports
@@ -139,6 +157,8 @@ pub fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
                 serialport::SerialPortType::PciPort => ("pci", None, None, None, None, None),
                 serialport::SerialPortType::Unknown => ("unknown", None, None, None, None, None),
             };
+            let likely = kind == "usb" || kind == "bluetooth" || is_usb_serial_name(&p.port_name);
+            let stable_path = stable_path_for(&p.port_name);
             SerialPortInfo {
                 path: p.port_name,
                 kind: kind.to_string(),
@@ -147,9 +167,46 @@ pub fn list_serial_ports() -> Result<Vec<SerialPortInfo>, String> {
                 manufacturer,
                 product,
                 serial_number,
+                likely,
+                stable_path,
             }
         })
         .collect())
+}
+
+/// A name only a USB-attached serial device gets.
+///
+/// The fallback for when the port type says `Unknown`, which on Linux it often
+/// does — the sysfs enumeration used without libudev classifies almost nothing,
+/// and even with libudev a plain `ttyS*` comes back unknown rather than PCI.
+/// The naming convention is stable across every Linux distribution: `ttyUSB*`
+/// for a vendor bridge (CH340, FTDI, PL2303), `ttyACM*` for a class-compliant
+/// CDC device, `cu.usb*` on macOS.
+fn is_usb_serial_name(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.starts_with("ttyUSB")
+        || name.starts_with("ttyACM")
+        || name.starts_with("cu.usb")
+        || name.starts_with("tty.usb")
+}
+
+/// The `/dev/serial/by-id/…` symlink pointing at this port, if the OS made one.
+///
+/// Linux only, and only for USB devices — which is exactly the case where the
+/// unstable name matters, because `ttyUSB0` is handed out in enumeration order.
+/// Read by resolving each symlink rather than by constructing a name: the
+/// encoding of the id (vendor, product, serial, interface) has changed between
+/// udev versions and is not ours to reproduce.
+fn stable_path_for(path: &str) -> Option<String> {
+    let dir = std::path::Path::new("/dev/serial/by-id");
+    let target = std::fs::canonicalize(path).ok()?;
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let link = entry.path();
+        if std::fs::canonicalize(&link).ok().as_deref() == Some(target.as_path()) {
+            return Some(link.to_string_lossy().into_owned());
+        }
+    }
+    None
 }
 
 /// Turn an open failure into something a person can act on.
@@ -208,6 +265,9 @@ pub fn open_scanner<R: Runtime>(
         }
     }
 
+    // Opened once here so a mistake the operator can fix — wrong port, no
+    // permission — is reported synchronously instead of disappearing into a
+    // thread. Everything after this is the supervisor's problem.
     let port = serialport::new(&path, baud)
         // Short enough that the stop flag is honoured promptly and the idle
         // framer has a tick to run on; long enough not to spin a core.
@@ -225,19 +285,92 @@ pub fn open_scanner<R: Runtime>(
     std::thread::Builder::new()
         .name(format!("pos-serial:{path}"))
         .spawn(move || {
-            read_loop(app, port, thread_path, idle_ms, stop);
+            supervise(app, port, thread_path, baud, idle_ms, stop);
         })
         .map_err(|e| format!("could not start reader for {path}: {e}"))?;
 
     Ok(())
 }
 
-fn read_loop<R: Runtime>(
+/// How long to wait between reconnection attempts, and how long before the
+/// operator is told. Re-enumeration takes a second or two; a scanner that is
+/// simply unplugged for the night should not fill a log.
+const RECONNECT_DELAY: Duration = Duration::from_millis(750);
+const RECONNECT_QUIET_ATTEMPTS: u32 = 8;
+
+/// Keep a reader on the port for as long as the host wants one.
+///
+/// ⚠ **A serial device disappearing is normal, not exceptional.** Some scanners
+/// re-enumerate between scans; a USB hub browns out; someone knocks the cable.
+/// The first version of this returned on the first read error, which left the
+/// port dead until the operator changed a setting — indistinguishable, from the
+/// floor, from a scanner nobody had scanned with.
+///
+/// So an error reopens rather than exits, and the operator is told only once
+/// the failure has persisted past `RECONNECT_QUIET_ATTEMPTS` — otherwise an
+/// ordinary re-enumeration would raise an alarm every time somebody scanned.
+fn supervise<R: Runtime>(
     app: AppHandle<R>,
-    mut port: Box<dyn serialport::SerialPort>,
+    first: Box<dyn serialport::SerialPort>,
     path: String,
+    baud: u32,
     idle_ms: u64,
     stop: Arc<AtomicBool>,
+) {
+    let mut port = Some(first);
+    let mut failures: u32 = 0;
+
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Some(open) = port.take() {
+            read_loop(&app, open, &path, idle_ms, &stop);
+            // read_loop only returns on stop or on a dead port.
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
+        }
+
+        std::thread::sleep(RECONNECT_DELAY);
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
+        match serialport::new(&path, baud)
+            .timeout(Duration::from_millis(25))
+            .open()
+        {
+            Ok(reopened) => {
+                if failures >= RECONNECT_QUIET_ATTEMPTS {
+                    // Only worth saying because the operator was told it broke.
+                    let _ = app.emit(
+                        ERROR_EVENT,
+                        SerialError { port: path.clone(), message: String::new() },
+                    );
+                }
+                failures = 0;
+                port = Some(reopened);
+            }
+            Err(e) => {
+                failures += 1;
+                if failures == RECONNECT_QUIET_ATTEMPTS {
+                    let _ = app.emit(
+                        ERROR_EVENT,
+                        SerialError { port: path.clone(), message: open_error_hint(&path, &e) },
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Read one open port until it stops or dies. Reconnection is [`supervise`]'s.
+fn read_loop<R: Runtime>(
+    app: &AppHandle<R>,
+    mut port: Box<dyn serialport::SerialPort>,
+    path: &str,
+    idle_ms: u64,
+    stop: &Arc<AtomicBool>,
 ) {
     let mut buffer: Vec<u8> = Vec::with_capacity(256);
     let mut chunk = [0u8; 256];
@@ -250,7 +383,7 @@ fn read_loop<R: Runtime>(
         }
         let bytes = std::mem::take(buffer);
         let scan = SerialScan {
-            port: path.clone(),
+            port: path.to_string(),
             text: String::from_utf8_lossy(&bytes).into_owned(),
             bytes,
             terminated_by: terminated_by.to_string(),
@@ -272,9 +405,9 @@ fn read_loop<R: Runtime>(
                     let was_cr = last_was_cr;
                     last_was_cr = byte == b'\r';
                     if let Some(terminator) = frame(&mut buffer, byte, was_cr) {
-                        emit(&app, &mut buffer, terminator);
+                        emit(app, &mut buffer, terminator);
                     } else if buffer.len() >= MAX_MESSAGE_LEN {
-                        emit(&app, &mut buffer, "overflow");
+                        emit(app, &mut buffer, "overflow");
                     }
                 }
             }
@@ -284,17 +417,13 @@ fn read_loop<R: Runtime>(
                     && !buffer.is_empty()
                     && last_byte_at.elapsed() >= Duration::from_millis(idle_ms)
                 {
-                    emit(&app, &mut buffer, "idle");
+                    emit(app, &mut buffer, "idle");
                 }
             }
-            Err(e) => {
-                // The device was unplugged, or the cable moved. Say so and stop
-                // — a reader spinning on a dead port helps nobody, and the host
-                // can offer to reopen.
-                let _ = app.emit(
-                    ERROR_EVENT,
-                    SerialError { port: path.clone(), message: format!("{e}") },
-                );
+            Err(_) => {
+                // The device went away. Hand back to the supervisor, which
+                // reopens — a scanner that re-enumerates between scans is a
+                // real device behaviour, not a fault to report on sight.
                 return;
             }
         }
