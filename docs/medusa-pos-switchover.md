@@ -238,7 +238,11 @@ dead. Seen on Manjaro 7.1.4, 2026-08-11. Windows binds the same device happily,
 so this is a Linux-host problem rather than a broken scanner. **If a scanner
 also offers Bluetooth SPP, that is a second serial route with no bridge chip in
 it** (`/dev/rfcomm0` after pairing and `rfcomm bind`) — worth trying before
-concluding the device cannot do serial at all.
+concluding the device cannot do serial at all. ⚠ `rfcomm` is upstream-deprecated
+and distributions have split it out of the main BlueZ package
+(`bluez-deprecated-tools` on Arch/Manjaro), so "no such command" is the expected
+first result even on a machine with Bluetooth working and `bluez-utils`
+installed. The kernel side (`rfcomm.ko`) is standard everywhere.
 
 ### Suggested settings shape
 
