@@ -9,6 +9,8 @@ export {
   type ReceiptItem,
   type ItemSubline,
   type MoneyRow,
+  type TextRow,
+  type PaymentRow,
   type BuildOptions,
 } from "./receipt";
 export {
