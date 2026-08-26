@@ -182,6 +182,23 @@ pub fn toggle_virtual_keyboard() {
     log::warn!("No virtual keyboard found on Linux");
 }
 
+// ─── Android ───────────────────────────────────────────────────────────────────
+// Added for the medusa-pos Android build (Product Photos feature) -- this
+// module previously had no android arm at all, so any Android target failed
+// to compile outright (E0425, `keyboard::has_physical_keyboard` not found).
+// A phone/tablet has no physical-keyboard-detection API worth calling here;
+// the OS's own on-screen keyboard already shows/hides itself on text-field
+// focus without an app-level toggle, unlike Windows' touch keyboard COM API.
+#[cfg(target_os = "android")]
+pub fn has_physical_keyboard() -> bool {
+    false
+}
+
+#[cfg(target_os = "android")]
+pub fn toggle_virtual_keyboard() {
+    log::info!("toggle_virtual_keyboard is a no-op on Android: the system IME handles this on focus");
+}
+
 // ─── macOS ─────────────────────────────────────────────────────────────────────
 #[cfg(target_os = "macos")]
 pub fn has_physical_keyboard() -> bool {
